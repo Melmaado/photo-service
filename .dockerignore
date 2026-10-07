@@ -1,0 +1,9 @@
+.venv/
+.env
+.gitattributes
+.gitignore
+Dockerfile
+.dockerignore
+__pycache__/
+.DS_Store
+.git/
