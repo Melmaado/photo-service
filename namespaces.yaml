@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: 21359-dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: 21359-prod
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: 21359-test
