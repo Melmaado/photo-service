@@ -1,0 +1,21 @@
+site_name: Photo Service Application Documentation
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+nav:
+  - "Photo Service Project": index.md
+  - "Onboarding": onboarding.md
+  - "Cluster Setup": cluster_setup.md
+  - "Database": database.md
+  - "CI/CD": ci_cd.md
+  - "Monitoring": monitoring.md

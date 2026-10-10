@@ -7,3 +7,7 @@ Dockerfile
 __pycache__/
 .DS_Store
 .git/
+.venv-docs/
+docs-requirements.txt
+docs/
+mkdocs.yml
