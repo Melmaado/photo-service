@@ -3,3 +3,11 @@ kind: Kustomization
 resources:
   - ../../base/
 namespace: 21359-dev
+patches:
+  - target:
+      kind: Ingress
+      name: photo-service
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: dev.photo.localhost
