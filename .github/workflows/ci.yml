@@ -1,0 +1,16 @@
+name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Python setup
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.6"
+      - name: Install dependencies
+        run: pip install -r requirements/requirements-dev.txt
+      - name: test
+        run: pytest
