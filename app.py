@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return f"Le nom de la machine est: {socket.gethostname()}, la version de l'app est {APP_VERSION}"
+    return f"Le nom de la machine est: {socket.gethostname()}\nla version de l'app est {APP_VERSION}\nCoucou la nouvelle version !\n"
 
 @app.route("/health")
 def health():
