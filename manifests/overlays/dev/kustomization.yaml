@@ -11,3 +11,6 @@ patches:
       - op: add
         path: /spec/rules/0/host
         value: dev.photo.localhost
+images:
+  - name: photo-service
+    newTag: "1.4"
