@@ -8,9 +8,11 @@ __pycache__/
 .DS_Store
 .git/
 .venv-docs/
-requirements-docs.txt
+requirements/requirements-docs.txt
 docs/
 mkdocs.yml
-requirements-dev.txt
+requirements/requirements-dev.txt
 .pytest_cache/
 test_app.py
+.github/
+manifests/
