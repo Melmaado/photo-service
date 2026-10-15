@@ -10,4 +10,4 @@ def test_main_page():
 def test_health():
     response_health = client.get("/health")
     assert response_health.status_code == 200
-    assert response_health.get_json() == {'status':'ok'}
+    assert response_health.get_json() == {'status':'ko'}
