@@ -12,7 +12,7 @@ jobs:
           python-version: "3.12.6"
       - name: Install dependencies
         run: pip install -r requirements/requirements-dev.txt
-      - name: test
+      - name: Begin test
         run: pytest
   build:
     needs: test
@@ -33,3 +33,12 @@ jobs:
         run: docker build -t ghcr.io/melmaado/photo-service:${{ github.sha }} .
       - name: Push the image
         run: docker push ghcr.io/melmaado/photo-service:${{ github.sha }}
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    steps:
+      - name: Check kubectl context
+        run: kubectl config current-context
+      - name: List pods
+        run: kubectl get pods -n 21359-dev
