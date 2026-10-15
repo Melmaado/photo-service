@@ -30,7 +30,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build the image
-        run: docker build -t ghcr.io/melmaado/photo-service:${{ github.sha }} .
+        run: docker build --build-arg APP_VERSION=${{ github.sha }} -t ghcr.io/melmaado/photo-service:${{ github.sha }} .
       - name: Push the image
         run: docker push ghcr.io/melmaado/photo-service:${{ github.sha }}
   deploy:
