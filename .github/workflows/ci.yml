@@ -38,7 +38,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: self-hosted
     steps:
-      - name: Check kubectl context
-        run: kubectl config current-context
-      - name: List pods
-        run: kubectl get pods -n 21359-dev
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Tag update
+        run: cd manifests/overlays/test && kustomize edit set image photo-service=ghcr.io/melmaado/photo-service:${{ github.sha }}
+      - name: Application of modifications
+        run: kubectl apply -k manifests/overlays/test
+      - name: Status check
+        run: kubectl rollout status deployment/photo-service -n 21359-test --timeout=120s
