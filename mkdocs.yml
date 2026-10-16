@@ -12,6 +12,8 @@ theme:
       toggle:
         icon: material/brightness-7
         name: Dark mode
+  features:
+    - toc.follow
 nav:
   - "Photo Service Project": index.md
   - "Onboarding": onboarding.md
@@ -19,3 +21,7 @@ nav:
   - "Database": database.md
   - "CI/CD": ci_cd.md
   - "Monitoring": monitoring.md
+markdown_extensions:
+  - toc:
+      permalink: true
+      toc_depth: 2
