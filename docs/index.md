@@ -16,6 +16,6 @@ The project features different milestones:
 | # | Date | Goal | Points | Status |
 |---|------|------|--------|--------|
 | 1 | 13 Oct 2026 | A simple application is replicated and accessible through an Ingress Controller (no database required) | 5 | Done |
-| 2 | 20 Oct 2026 | A push to Git triggers unit tests, image build and a rollout in the test environment | 5 | Pending |
+| 2 | 20 Oct 2026 | A push to Git triggers unit tests, image build and a rollout in the test environment | 5 | Done |
 | 3 | 03 Nov 2026 | A dashboard monitors the services and allows scaling them | 5 | Pending |
 | – | 17 Nov 2026 | **Final evaluation**: live pipeline demo (Git push → Production), infrastructure review and documentation review | 35 | Pending |
