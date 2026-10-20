@@ -14,7 +14,7 @@ def home():
 
 @app.route("/health")
 def health():
-    status = "ok"
+    status = "ko"
     state = {'status':status}
     return state 
 
