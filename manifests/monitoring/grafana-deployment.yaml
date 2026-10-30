@@ -44,6 +44,10 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: grafana-volume-data
               mountPath: /var/lib/grafana
+            - name: grafana-volume-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: grafana-volume-dashboards
+              mountPath: /etc/grafana/dashboards
           readinessProbe:
             httpGet:
               path: "/grafana/api/health"
@@ -62,3 +66,9 @@ spec:
             secretName: grafana-datasources
         - name: grafana-volume-data
           emptyDir: {}
+        - name: grafana-volume-provider
+          secret:
+            secretName: grafana-dashboard-provider
+        - name: grafana-volume-dashboards
+          secret:
+            secretName: grafana-dashboards

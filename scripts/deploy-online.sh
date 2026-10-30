@@ -26,8 +26,9 @@ kubectl --context "$CONTEXT" apply -k manifests/monitoring
 echo "==> Waiting for all deployments to be ready"
 # Loop: run the same command for each Deployment in the list.
 for deployment in photo-service-test photo-service-prod prometheus grafana; do
-  kubectl --context "$CONTEXT" rollout status "deployment/$deployment" --timeout=180s
+  kubectl --context "$CONTEXT" rollout status "deployment/$deployment" --timeout=300s
 done
 
 echo "==> Everything is deployed ✅"
-echo "    Prod: http://team1.laboinfo-ecam.be"
+echo "    Prod:    http://team1.laboinfo-ecam.be"
+echo "    Grafana: http://team1.laboinfo-ecam.be/grafana"

@@ -8,6 +8,12 @@ secretGenerator:
   - name: grafana-datasources
     files:
       - grafana-datasources.yaml
+  - name: grafana-dashboard-provider
+    files:
+      - grafana-dashboard-provider.yaml
+  - name: grafana-dashboards
+    files:
+      - grafana-dashboard-photo-service.json
 generatorOptions:
   disableNameSuffixHash: true
 resources:
@@ -15,3 +21,4 @@ resources:
   - prometheus-service.yaml
   - grafana-deployment.yaml
   - grafana-service.yaml
+  - grafana-httproute.yaml
