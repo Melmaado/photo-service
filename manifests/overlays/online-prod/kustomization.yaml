@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/
+  - httproute.yaml
+namespace: team1
+nameSuffix: -prod
+labels:
+  - pairs:
+      env: prod
+    includeSelectors: true
+patches:
+  - target:
+      kind: Deployment
+      name: photo-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+images:
+  - name: photo-service
+    newName: ghcr.io/melmaado/photo-service
+    newTag: 8404c6df4de7fb86451e52ac14da4a9e88c2afcf
