@@ -39,6 +39,10 @@ spec:
                   name: grafana-admin
                   key: admin-password
                   optional: true
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+            - name: GF_AUTH_BASIC_ENABLED
+              value: "false"
           volumeMounts:
             - name: grafana-volume-config
               mountPath: /etc/grafana/provisioning/datasources
