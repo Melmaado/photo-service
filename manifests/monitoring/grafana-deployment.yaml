@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:13.3.0
+          ports:
+          - containerPort: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          env:
+            - name: GF_SERVER_ROOT_URL
+              value: http://team1.laboinfo-ecam.be/grafana/
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Viewer
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+                  optional: true
+          volumeMounts:
+            - name: grafana-volume-config
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-volume-data
+              mountPath: /var/lib/grafana
+          readinessProbe:
+            httpGet:
+              path: "/grafana/api/health"
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: "/grafana/api/health"
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+      volumes:
+        - name: grafana-volume-config
+          secret:
+            secretName: grafana-datasources
+        - name: grafana-volume-data
+          emptyDir: {}

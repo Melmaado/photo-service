@@ -16,3 +16,4 @@ requirements/requirements-dev.txt
 test_app.py
 .github/
 manifests/
+scripts/

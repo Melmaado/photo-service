@@ -5,8 +5,13 @@ secretGenerator:
   - name: prometheus-config
     files:
       - prometheus.yml
+  - name: grafana-datasources
+    files:
+      - grafana-datasources.yaml
 generatorOptions:
   disableNameSuffixHash: true
 resources:
   - prometheus-deployment.yaml
   - prometheus-service.yaml
+  - grafana-deployment.yaml
+  - grafana-service.yaml
