@@ -2,11 +2,13 @@ from flask import Flask
 import socket
 import os
 from dotenv import load_dotenv
+from prometheus_flask_exporter import PrometheusMetrics
 
 load_dotenv()
 APP_VERSION = os.environ.get("APP_VERSION", "0.5")
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 
 @app.route("/")
 def home():

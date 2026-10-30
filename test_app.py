@@ -11,3 +11,8 @@ def test_health():
     response_health = client.get("/health")
     assert response_health.status_code == 200
     assert response_health.get_json() == {'status':'ok'}
+
+def test_metrics():
+    response_metrics = client.get("/metrics")
+    assert response_metrics.status_code == 200
+    assert "flask_http_request_total" in response_metrics.text
