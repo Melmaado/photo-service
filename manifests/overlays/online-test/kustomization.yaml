@@ -19,4 +19,4 @@ patches:
 images:
   - name: photo-service
     newName: ghcr.io/melmaado/photo-service
-    newTag: 8404c6df4de7fb86451e52ac14da4a9e88c2afcf
+    newTag: fff489d0edf820f3a0d379a3492129c1db16a5ec
