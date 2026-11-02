@@ -12,7 +12,7 @@ metrics = PrometheusMetrics(app)
 
 @app.route("/")
 def home():
-    return f"Le nom de la machine est: {socket.gethostname()}\nla version de l'app est {APP_VERSION}\nCoucou la nouvelle version !\n Milestone 2 FAIT !\n"
+    return f"Le nom de la machine est: {socket.gethostname()}\nla version de l'app est {APP_VERSION}\nCoucou la nouvelle version !\n Milestone 3 FAIT !\n"
 
 @app.route("/health")
 def health():
