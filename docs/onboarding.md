@@ -224,3 +224,8 @@ The `test` environment is updated automatically by the CI pipeline: nobody deplo
 - **The `dev` environment is not updated by the CI**: it stays on the local image until you update it yourself (see section 5).
 
 For the details of each job, the technical choices and the troubleshooting guide, see the *CI/CD* page.
+
+## Monitoring and scaling
+
+- The dashboard is public: http://team1.laboinfo-ecam.be/grafana
+- To scale the online services, install [Headlamp](https://headlamp.dev) (`brew install --cask headlamp`) and use the context `team1@cluster-sc`. See *Monitoring*, section 6.
