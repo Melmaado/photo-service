@@ -51,10 +51,26 @@ def photos():
             WHERE user_id = %s
             ORDER BY created_at DESC;
         """,(session["user_id"],)).fetchall()
+        dup_rows = co.execute("""
+        SELECT id, filename, size
+        FROM photos
+        WHERE user_id = %s
+            AND pic_hash IN (
+                SELECT pic_hash
+                FROM photos
+                WHERE user_id = %s
+                GROUP BY pic_hash
+                HAVING COUNT(*) > 1
+            )
+        ORDER BY pic_hash, created_at;
+        """,(session["user_id"], session["user_id"])).fetchall()
     result = []
     for photo_id, filename, size in rows:
-        result.append({ "id": photo_id, "filename":filename, "size":size})
-    return render_template("photos.html", photos=result)
+        result.append({"id": photo_id, "filename":filename, "size":size})
+    duplicates = []
+    for photo_id, filename, size in dup_rows:
+        duplicates.append({"id": photo_id, "filename":filename, "size":size})
+    return render_template("photos.html", photos=result, duplicates=duplicates)
 
 @app.route("/upload", methods=["POST"])
 def upload():
