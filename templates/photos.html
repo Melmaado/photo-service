@@ -8,6 +8,9 @@
 <body>
     <main>
         <h1>My photos</h1>
+        {% for message in get_flashed_messages() %}
+        <p class="flash">{{ message }}</p>
+        {% endfor %}
         <form method="post" action="/upload" enctype="multipart/form-data">
             <input type="file" name="photo" required>
             <button>Upload</button>

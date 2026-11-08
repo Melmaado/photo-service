@@ -1,4 +1,4 @@
-from flask import Flask, request, session, redirect, render_template, Response
+from flask import Flask, request, session, redirect, render_template, Response, flash
 import socket
 import os
 from dotenv import load_dotenv
@@ -65,6 +65,12 @@ def upload():
     pic_hash = hashlib.sha256(data).hexdigest()
     size = len(data)
     with get_db() as co:
+        existing = co.execute("""
+            SELECT id FROM photos
+            WHERE user_id = %s AND pic_hash = %s
+        """, (session["user_id"], pic_hash)).fetchone()
+        if existing is not None:
+            flash("This photo is already in your library.")
         co.execute("""
             INSERT INTO photos (user_id, filename, size, pic_hash, pic)
             VALUES (%s, %s, %s, %s, %s);
