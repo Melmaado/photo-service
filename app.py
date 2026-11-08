@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from prometheus_flask_exporter import PrometheusMetrics
 import psycopg
+import hashlib
 
 load_dotenv()
 APP_VERSION = os.environ.get("APP_VERSION", "0.5")
@@ -52,7 +53,23 @@ def photos():
     result = []
     for filename, size in rows:
         result.append({"filename":filename, "size":size})
-    return result
+    return render_template("photos.html", photos=result)
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    if "user_id" not in session:
+        return redirect("/login")
+    file = request.files["photo"]
+    data = file.read()
+    pic_hash = hashlib.sha256(data).hexdigest()
+    size = len(data)
+    with get_db() as co:
+        co.execute("""
+            INSERT INTO photos (user_id, filename, size, pic_hash, pic)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (session["user_id"], file.filename, size, pic_hash, data))
+    return redirect("/photos")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0",port=8080)

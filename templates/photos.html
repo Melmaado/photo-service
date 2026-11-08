@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Mhido's Photo Service</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    </head>
+<body>
+    <main>
+        <h1>My photos</h1>
+        <form method="post" action="/upload" enctype="multipart/form-data">
+            <input type="file" name="photo" required>
+            <button>Upload</button>
+        </form>
+        <div class="grid">
+            {% for photo in photos %}
+            <div class="card">
+                <p>{{ photo.filename }} . {{ photo.size }} B</p>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+</body>
+</html>
