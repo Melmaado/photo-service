@@ -1,10 +1,11 @@
-from flask import Flask, request, session, redirect, render_template
+from flask import Flask, request, session, redirect, render_template, Response
 import socket
 import os
 from dotenv import load_dotenv
 from prometheus_flask_exporter import PrometheusMetrics
 import psycopg
 import hashlib
+import mimetypes
 
 load_dotenv()
 APP_VERSION = os.environ.get("APP_VERSION", "0.5")
@@ -45,14 +46,14 @@ def photos():
         return redirect("/login")
     with get_db() as co:
         rows = co.execute("""
-            SELECT filename, size
+            SELECT id, filename, size
             FROM photos
             WHERE user_id = %s
             ORDER BY created_at DESC;
         """,(session["user_id"],)).fetchall()
     result = []
-    for filename, size in rows:
-        result.append({"filename":filename, "size":size})
+    for photo_id, filename, size in rows:
+        result.append({ "id": photo_id, "filename":filename, "size":size})
     return render_template("photos.html", photos=result)
 
 @app.route("/upload", methods=["POST"])
@@ -66,10 +67,24 @@ def upload():
     with get_db() as co:
         co.execute("""
             INSERT INTO photos (user_id, filename, size, pic_hash, pic)
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s);
         """, (session["user_id"], file.filename, size, pic_hash, data))
     return redirect("/photos")
 
+@app.route("/photo/<int:photo_id>")
+def photo(photo_id):
+    if "user_id" not in session:
+        return redirect("/login")
+    with get_db() as co:
+        row = co.execute("""
+            SELECT filename, pic FROM photos
+            WHERE id = %s AND user_id = %s        
+        """, (photo_id, session["user_id"])).fetchone()
+    if row is None:
+        return "Not found", 404
+    filename, pic = row
+    mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return Response(pic, mimetype=mimetype)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0",port=8080)

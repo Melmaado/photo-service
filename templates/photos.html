@@ -15,6 +15,7 @@
         <div class="grid">
             {% for photo in photos %}
             <div class="card">
+                <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
                 <p>{{ photo.filename }} . {{ photo.size }} B</p>
             </div>
             {% endfor %}
