@@ -33,7 +33,7 @@ This keeps the application simple; the focus of the project is the infrastructur
 The username will also be used to choose the database shard.
 
 ### Photo storage
-The photos are stored in the database, not on a disk for the following reasons: the application runs on 3 different pods, often on different machines, while a disk is attached to only one machine. If the pictures were on a disk, the 3 pods couldn't access all of them.
+The photos are stored in the database, not on a disk, for the following reasons: the application runs on 3 different pods, often on different machines, while a disk is attached to only one machine. If the pictures were on a disk, the 3 pods couldn't access all of them.
 Furthermore, since all of the pods communicate with the database, they all have access to the pictures. The replication of the database creates copies of the pictures too, and sharding allows keeping each user's pictures in the same shard of the database as the user. Finally, the test refresh copies them as well.
 
 ### Duplicate detection
@@ -44,8 +44,13 @@ not to block them at upload.
 SHA-256 only finds exact copies. A later migration adds a perceptual hash to also
 find similar photos.
 
+### Schema migrations
+The schema is managed with Alembic. Each change is a versioned file in
+`migrations/versions/`, written in plain SQL. `alembic upgrade head` applies
+only the missing migrations, so it is safe to run at every deployment.
+
 ## Limitations
-Storing photos in the database makes it grow quickly. A production setup would store
-the files in object storage (such as AWS S3) and keep only their path in the database.
-There is no password: anyone who knows a username can access that user's photos.
-A production setup would add real authentication.
+- Storing photos in the database makes it grow quickly. A production setup would
+  store the files in object storage (such as AWS S3) and keep only their path in the database.
+- There is no password: anyone who knows a username can access that user's photos.
+  A production setup would add real authentication.
