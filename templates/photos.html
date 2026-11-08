@@ -6,6 +6,10 @@
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     </head>
 <body>
+    <nav>
+        <span class="user">♡ {{ session["username"] }}</span>
+        <a href="/logout">Logout</a>
+    </nav>
     <main>
         <h1>My photos</h1>
         {% for message in get_flashed_messages() %}
@@ -15,13 +19,18 @@
             <input type="file" name="photo" required>
             <button>Upload</button>
         </form>
-
         {% if duplicates %}
         <h2>Duplicates</h2>
         <div class="grid">
             {% for photo in duplicates %}
             <div class="card">
-                <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+                <form method="post" action="/delete/{{ photo.id }}" class="delete">
+                    <button title="Delete">✕</button>
+                </form>
+                <a href="/photo/{{ photo.id }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
+                <a href="#photo-{{ photo.id }}">
+                    <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+                </a>
                 <p>{{ photo.filename }} . {{ photo.size }} B</p>
             </div>
             {% endfor %}
@@ -31,11 +40,24 @@
         <div class="grid">
             {% for photo in photos %}
             <div class="card">
-                <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+                <form method="post" action="/delete/{{ photo.id }}" class="delete">
+                    <button title="Delete">✕</button>
+                </form>
+                <a href="/photo/{{ photo.id }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
+                <a href="#photo-{{ photo.id }}">
+                    <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+                </a>
                 <p>{{ photo.filename }} . {{ photo.size }} B</p>
             </div>
             {% endfor %}
         </div>
+
+        {% for photo in photos %}
+        <a href="#_" class="lightbox" id="photo-{{ photo.id }}">
+            <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+            <span>{{ photo.filename }}</span>
+        </a>
+        {% endfor %}
     </main>
 </body>
 </html>

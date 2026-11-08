@@ -47,23 +47,37 @@ h1::before { content: "✿ "; }
 h1::after  { content: " ✿"; }
 
 nav {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 50;
   display: flex;
-  justify-content: center;
-  gap: 12px;
-  padding: 14px 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 16px;
   background: var(--card);
-  border-bottom: 3px dashed var(--border);
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 4px 0 var(--border);
+}
+
+nav .user {
+  color: var(--accent-dark);
+  font-weight: 600;
 }
 
 nav a {
-  color: var(--text);
-  text-decoration: none;
-  font-weight: 600;
   padding: 6px 14px;
   border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 3px 0 var(--accent-dark);
 }
 
-nav a:hover { background: var(--bg); color: var(--accent-dark); }
+nav a:hover { transform: translateY(-1px); }
 
 form {
   display: flex;
@@ -154,3 +168,94 @@ h2 {
   color: var(--accent-dark);
   margin: 8px 0 0;
 }
+
+.card { position: relative; }
+
+form.delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  width: auto;
+}
+
+form.delete button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1;
+  box-shadow: 0 3px 0 var(--accent-dark);
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.card:hover form.delete button { opacity: 1; }
+form.delete button:hover { transform: scale(1.15) rotate(90deg); }
+
+.lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(90, 42, 74, 0.75);
+  backdrop-filter: blur(6px);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-decoration: none;
+  cursor: zoom-out;
+}
+
+.lightbox:target { display: flex; }
+
+.lightbox img {
+  max-width: 90vw;
+  max-height: 80vh;
+  border: 4px solid #fff;
+  border-radius: 20px;
+  box-shadow: 0 8px 0 var(--accent-dark);
+}
+
+.lightbox span {
+  color: #fff;
+  font-weight: 600;
+  background: var(--accent);
+  padding: 6px 16px;
+  border-radius: 999px;
+}
+
+.card a { cursor: zoom-in; }
+
+.card a.download {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 3px 0 var(--accent-dark);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.card:hover a.download { opacity: 1; }
+.card a.download:hover { transform: scale(1.15); }

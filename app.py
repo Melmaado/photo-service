@@ -32,6 +32,7 @@ def login():
         if row is None:
             row = co.execute("INSERT INTO users (username) VALUES (%s) RETURNING id;", (username,)).fetchone()
     session["user_id"] = row[0]
+    session["username"] = username
     return redirect("/photos")
 
 @app.route("/health")
@@ -100,13 +101,29 @@ def photo(photo_id):
     with get_db() as co:
         row = co.execute("""
             SELECT filename, pic FROM photos
-            WHERE id = %s AND user_id = %s        
+            WHERE id = %s AND user_id = %s;        
         """, (photo_id, session["user_id"])).fetchone()
     if row is None:
         return "Not found", 404
     filename, pic = row
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return Response(pic, mimetype=mimetype)
+
+@app.route("/delete/<int:photo_id>", methods=["POST"])
+def delete(photo_id):
+    if "user_id" not in session:
+        return redirect("/login")
+    with get_db() as co:
+        co.execute("""
+            DELETE FROM photos
+            WHERE id = %s AND user_id = %s;
+        """, (photo_id, session["user_id"]))
+    return redirect("/photos")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0",port=8080)
