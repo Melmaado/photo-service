@@ -6,3 +6,9 @@ resources:
   - service-headless.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml
+secretGenerator:
+  - name: postgres-init
+    files:
+      - postgres-init/allow-replication.sh
+generatorOptions:
+  disableNameSuffixHash: true

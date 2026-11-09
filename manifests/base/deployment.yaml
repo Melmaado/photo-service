@@ -24,7 +24,7 @@ spec:
                   name: photo-secrets
                   key: POSTGRES_PASSWORD
             - name: DB_HOST
-              value: postgres
+              value: postgres-0.postgres
             - name: DATABASE_URL
               value: postgresql://postgres:$(POSTGRES_PASSWORD)@$(DB_HOST):5432/photo
       containers:
@@ -40,7 +40,7 @@ spec:
                   name: photo-secrets
                   key: POSTGRES_PASSWORD
             - name: DB_HOST
-              value: postgres
+              value: postgres-0.postgres
             - name: DATABASE_URL
               value: postgresql://postgres:$(POSTGRES_PASSWORD)@$(DB_HOST):5432/photo
             - name: SECRET_KEY
