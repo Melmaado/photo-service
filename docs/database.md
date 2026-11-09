@@ -49,8 +49,20 @@ The schema is managed with Alembic. Each change is a versioned file in
 `migrations/versions/`, written in plain SQL. `alembic upgrade head` applies
 only the missing migrations, so it is safe to run at every deployment.
 
+### Replication
+PostgreSQL is deployed as a StatefulSet consisting of two pods using streaming replication:
+
+- `postgres-0` acts as the primary. All write operations from the application arrive here, since the app establishes its connection to `postgres-0.postgres` via the headless Service.
+
+- `postgres-1` serves as a read-only replica. During its initial startup, it clones the primary using `pg_basebackup` and then continuously applies changes as they stream in through the WAL (write-ahead log).
+
+An init script appends a `replication` entry to `pg_hba.conf` on the primary, permitting the replica to establish a connection.
+
 ## Limitations
-- Storing photos in the database makes it grow quickly. A production setup would
-  store the files in object storage (such as AWS S3) and keep only their path in the database.
-- There is no password: anyone who knows a username can access that user's photos.
-  A production setup would add real authentication.
+- Storing photos in the database makes it grow quickly. A production setup would store the files in object storage (such as AWS S3) and keep only their path in the database.
+
+- There is no password: anyone who knows a username can access that user's photos. A production setup would add real authentication.
+
+- No automatic failover is in place: should the primary go down, the replica retains all data but won't promote itself on its own. Handling that would require a tool such as Patroni or CloudNativePG.
+
+- The application talks exclusively to the primary — read queries are not distributed to the replica.
