@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-shard1
+spec:
+  serviceName: postgres-shard1
+  replicas: 2
+  selector:
+    matchLabels:
+      app: postgres-shard1
+  template:
+    metadata:
+      labels:
+        app: postgres-shard1
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          command:
+            - bash
+            - -c
+            - |
+              ORDINAL="${HOSTNAME##*-}"
+              NAME="${HOSTNAME%-*}"
+              if [ "$ORDINAL" != "0" ] && [ ! -s "$PGDATA/PG_VERSION" ]; then
+                echo "Cloning from ${NAME}-0.${NAME}"
+                until PGPASSWORD="$POSTGRES_PASSWORD" pg_basebackup -h "${NAME}-0.${NAME}" -U postgres -D "$PGDATA" -R -X stream; do
+                  echo "Primary not ready, retrying in 5s"
+                  rm -rf "$PGDATA"
+                  sleep 5
+                done
+              fi
+              exec docker-entrypoint.sh postgres
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: photo-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: photo
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: init
+          secret:
+            secretName: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

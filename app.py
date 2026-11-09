@@ -9,31 +9,26 @@ import mimetypes
 
 load_dotenv()
 APP_VERSION = os.environ.get("APP_VERSION", "0.5")
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URLS = [
+    os.environ.get("DATABASE_URL_0"),
+    os.environ.get("DATABASE_URL_1"),
+]
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev")
 metrics = PrometheusMetrics(app)
 
-def get_db():
-    return psycopg.connect(DATABASE_URL)
+def shard_for(username):
+    shard = hashlib.sha256(username.encode()).digest()[0]%2
+    return shard
+
+def get_db(username):
+    return psycopg.connect(DATABASE_URLS[shard_for(username)])
+
 
 @app.route("/")
 def home():
     return f"Le nom de la machine est: {socket.gethostname()}\nla version de l'app est {APP_VERSION}\nCoucou la nouvelle version !\n Milestone 3 FAIT !\n"
-
-@app.route("/login", methods=["GET","POST"])
-def login():
-    if request.method == "GET":
-        return render_template("login.html")
-    username = request.form["username"]
-    with get_db() as co:
-        row = co.execute("SELECT id FROM users WHERE username = %s;", (username,)).fetchone()
-        if row is None:
-            row = co.execute("INSERT INTO users (username) VALUES (%s) RETURNING id;", (username,)).fetchone()
-    session["user_id"] = row[0]
-    session["username"] = username
-    return redirect("/photos")
 
 @app.route("/health")
 def health():
@@ -41,11 +36,25 @@ def health():
     state = {'status':status}
     return state 
 
+@app.route("/login", methods=["GET","POST"])
+def login():
+    if request.method == "GET":
+        return render_template("login.html")
+    username = request.form["username"]
+    session["shard"] = shard_for(username)
+    with get_db(username) as co:
+        row = co.execute("SELECT id FROM users WHERE username = %s;", (username,)).fetchone()
+        if row is None:
+            row = co.execute("INSERT INTO users (username) VALUES (%s) RETURNING id;", (username,)).fetchone()
+    session["user_id"] = row[0]
+    session["username"] = username
+    return redirect("/photos")
+
 @app.route("/photos")
 def photos():
     if "user_id" not in session:
         return redirect("/login")
-    with get_db() as co:
+    with get_db(session["username"]) as co:
         rows = co.execute("""
             SELECT id, filename, size
             FROM photos
@@ -81,7 +90,7 @@ def upload():
     data = file.read()
     pic_hash = hashlib.sha256(data).hexdigest()
     size = len(data)
-    with get_db() as co:
+    with get_db(session["username"]) as co:
         existing = co.execute("""
             SELECT id FROM photos
             WHERE user_id = %s AND pic_hash = %s
@@ -98,7 +107,7 @@ def upload():
 def photo(photo_id):
     if "user_id" not in session:
         return redirect("/login")
-    with get_db() as co:
+    with get_db(session["username"]) as co:
         row = co.execute("""
             SELECT filename, pic FROM photos
             WHERE id = %s AND user_id = %s;        
@@ -113,7 +122,7 @@ def photo(photo_id):
 def delete(photo_id):
     if "user_id" not in session:
         return redirect("/login")
-    with get_db() as co:
+    with get_db(session["username"]) as co:
         co.execute("""
             DELETE FROM photos
             WHERE id = %s AND user_id = %s;

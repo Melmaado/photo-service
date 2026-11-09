@@ -6,6 +6,8 @@ resources:
   - service-headless.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml
+  - postgres-shard1-service.yaml
+  - postgres-shard1-statefulset.yaml
 secretGenerator:
   - name: postgres-init
     files:
