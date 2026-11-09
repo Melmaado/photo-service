@@ -19,6 +19,12 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
+
+secretGenerator:
+  - name: photo-secrets
+    literals:
+      - POSTGRES_PASSWORD=local-db-password
+      - SECRET_KEY=local-secret-key
         
 images:
   - name: photo-service

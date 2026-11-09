@@ -12,6 +12,13 @@ patches:
       - op: add
         path: /spec/rules/0/host
         value: dev.photo.localhost
+
+secretGenerator:
+  - name: photo-secrets
+    literals:
+      - POSTGRES_PASSWORD=local-db-password
+      - SECRET_KEY=local-secret-key
+
 images:
   - name: photo-service
     newTag: "1.4"

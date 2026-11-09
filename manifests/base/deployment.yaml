@@ -12,12 +12,42 @@ spec:
       labels:
         app: photo-service
     spec:
+      initContainers:
+        - name: migrate
+          image: photo-service:1.3
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: photo-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DB_HOST
+              value: postgres
+            - name: DATABASE_URL
+              value: postgresql://postgres:$(POSTGRES_PASSWORD)@$(DB_HOST):5432/photo
       containers:
         - name: photo-service
           image: photo-service:1.3
           imagePullPolicy: Never
           ports:
           - containerPort: 8080
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: photo-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DB_HOST
+              value: postgres
+            - name: DATABASE_URL
+              value: postgresql://postgres:$(POSTGRES_PASSWORD)@$(DB_HOST):5432/photo
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: photo-secrets
+                  key: SECRET_KEY
           readinessProbe:
             httpGet:
               path: "/health"
