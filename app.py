@@ -1,4 +1,4 @@
-from flask import Flask, request, session, redirect, render_template, Response, flash
+from flask import Flask, request, session, redirect, render_template, Response, flash, url_for
 import socket
 import os
 from dotenv import load_dotenv
@@ -21,6 +21,27 @@ cache = redis.Redis.from_url(REDIS_URL) if REDIS_URL else None
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev")
 metrics = PrometheusMetrics(app)
+
+URL_PREFIX = os.environ.get("URL_PREFIX", "").rstrip("/")
+
+
+class PrefixMiddleware:
+    def __init__(self, wsgi_app, prefix):
+        self.wsgi_app = wsgi_app
+        self.prefix = prefix
+
+    def __call__(self, environ, start_response):
+        path = environ.get("PATH_INFO", "")
+        if self.prefix and (path == self.prefix or path.startswith(self.prefix + "/")):
+            environ["SCRIPT_NAME"] = self.prefix
+            environ["PATH_INFO"] = path[len(self.prefix):] or "/"
+        return self.wsgi_app(environ, start_response)
+
+
+app.wsgi_app = PrefixMiddleware(app.wsgi_app, URL_PREFIX)
+app.config["SESSION_COOKIE_NAME"] = "session" + URL_PREFIX.replace("/", "_")
+app.config["SESSION_COOKIE_PATH"] = URL_PREFIX or "/"
+
 
 def shard_for(username):
     shard = hashlib.sha256(username.encode()).digest()[0]%2
@@ -52,12 +73,12 @@ def login():
             row = co.execute("INSERT INTO users (username) VALUES (%s) RETURNING id;", (username,)).fetchone()
     session["user_id"] = row[0]
     session["username"] = username
-    return redirect("/photos")
+    return redirect(url_for("photos"))
 
 @app.route("/photos")
 def photos():
     if "user_id" not in session:
-        return redirect("/login")
+        return redirect(url_for("login"))
     with get_db(session["username"]) as co:
         rows = co.execute("""
             SELECT id, filename, size
@@ -89,7 +110,7 @@ def photos():
 @app.route("/upload", methods=["POST"])
 def upload():
     if "user_id" not in session:
-        return redirect("/login")
+        return redirect(url_for("login"))
     file = request.files["photo"]
     data = file.read()
     pic_hash = hashlib.sha256(data).hexdigest()
@@ -105,12 +126,12 @@ def upload():
             INSERT INTO photos (user_id, filename, size, pic_hash, pic)
             VALUES (%s, %s, %s, %s, %s);
         """, (session["user_id"], file.filename, size, pic_hash, data))
-    return redirect("/photos")
+    return redirect(url_for("photos"))
 
 @app.route("/photo/<int:photo_id>")
 def photo(photo_id):
     if "user_id" not in session:
-        return redirect("/login")
+        return redirect(url_for("login"))
     key = f"photo:{session['username']}:{photo_id}"
 
     if cache is not None:
@@ -144,7 +165,7 @@ def photo(photo_id):
 @app.route("/delete/<int:photo_id>", methods=["POST"])
 def delete(photo_id):
     if "user_id" not in session:
-        return redirect("/login")
+        return redirect(url_for("login"))
     with get_db(session["username"]) as co:
         co.execute("""
             DELETE FROM photos
@@ -152,12 +173,12 @@ def delete(photo_id):
         """, (photo_id, session["user_id"]))
     if cache is not None:
         cache.delete(f"photo:{session['username']}:{photo_id}")
-    return redirect("/photos")
+    return redirect(url_for("photos"))
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/login")
+    return redirect(url_for("login"))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0",port=8080)

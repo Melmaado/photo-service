@@ -8,14 +8,14 @@
 <body>
     <nav>
         <span class="user">♡ {{ session["username"] }} · shard {{ session["shard"] }}</span>
-        <a href="/logout">Logout</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
     </nav>
     <main>
         <h1>My photos</h1>
         {% for message in get_flashed_messages() %}
         <p class="flash">{{ message }}</p>
         {% endfor %}
-        <form method="post" action="/upload" enctype="multipart/form-data">
+        <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data">
             <input type="file" name="photo" required>
             <button>Upload</button>
         </form>
@@ -24,12 +24,12 @@
         <div class="grid">
             {% for photo in duplicates %}
             <div class="card">
-                <form method="post" action="/delete/{{ photo.id }}" class="delete">
+                <form method="post" action="{{ url_for('delete', photo_id=photo.id) }}" class="delete">
                     <button title="Delete">✕</button>
                 </form>
-                <a href="/photo/{{ photo.id }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
+                <a href="{{ url_for('photo', photo_id=photo.id) }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
                 <a href="#photo-{{ photo.id }}">
-                    <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+                    <img src="{{ url_for('photo', photo_id=photo.id) }}" alt="{{ photo.filename }}">
                 </a>
                 <p>{{ photo.filename }} . {{ photo.size }} B</p>
             </div>
@@ -40,12 +40,12 @@
         <div class="grid">
             {% for photo in photos %}
             <div class="card">
-                <form method="post" action="/delete/{{ photo.id }}" class="delete">
+                <form method="post" action="{{ url_for('delete', photo_id=photo.id) }}" class="delete">
                     <button title="Delete">✕</button>
                 </form>
-                <a href="/photo/{{ photo.id }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
+                <a href="{{ url_for('photo', photo_id=photo.id) }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
                 <a href="#photo-{{ photo.id }}">
-                    <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+                    <img src="{{ url_for('photo', photo_id=photo.id) }}" alt="{{ photo.filename }}">
                 </a>
                 <p>{{ photo.filename }} . {{ photo.size }} B</p>
             </div>
@@ -54,7 +54,7 @@
 
         {% for photo in photos %}
         <a href="#_" class="lightbox" id="photo-{{ photo.id }}">
-            <img src="/photo/{{ photo.id }}" alt="{{ photo.filename }}">
+            <img src="{{ url_for('photo', photo_id=photo.id) }}" alt="{{ photo.filename }}">
             <span>{{ photo.filename }}</span>
         </a>
         {% endfor %}
