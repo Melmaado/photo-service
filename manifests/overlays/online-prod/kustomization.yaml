@@ -17,7 +17,8 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
+  - path: patch-env.yaml
 images:
   - name: photo-service
     newName: ghcr.io/melmaado/photo-service
-    newTag: 940e6d461c962a9c4727b96ef7b1aee04806b7a7
+    newTag: 1019052436af7d1cc72bd007e0bfbf12d0234dea

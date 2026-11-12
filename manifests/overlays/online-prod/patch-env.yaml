@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: photo-service
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: migrate
+          env:
+            - name: DB_HOST_0
+              value: postgres-prod-0.postgres-prod
+            - name: DB_HOST_1
+              value: postgres-shard1-prod-0.postgres-shard1-prod
+      containers:
+        - name: photo-service
+          env:
+            - name: DB_HOST_0
+              value: postgres-prod-0.postgres-prod
+            - name: DB_HOST_1
+              value: postgres-shard1-prod-0.postgres-shard1-prod
+            - name: REDIS_URL
+              value: redis://redis-prod-0.redis-prod:6379/0
