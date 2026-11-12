@@ -8,6 +8,8 @@ resources:
   - postgres-statefulset.yaml
   - postgres-shard1-service.yaml
   - postgres-shard1-statefulset.yaml
+  - redis-service.yaml
+  - redis-statefulset.yaml
 secretGenerator:
   - name: postgres-init
     files:
