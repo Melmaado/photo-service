@@ -6,6 +6,7 @@ from prometheus_flask_exporter import PrometheusMetrics
 import psycopg
 import hashlib
 import mimetypes
+import redis
 
 load_dotenv()
 APP_VERSION = os.environ.get("APP_VERSION", "0.5")
@@ -13,6 +14,9 @@ DATABASE_URLS = [
     os.environ.get("DATABASE_URL_0"),
     os.environ.get("DATABASE_URL_1"),
 ]
+
+REDIS_URL = os.environ.get("REDIS_URL")
+cache = redis.Redis.from_url(REDIS_URL) if REDIS_URL else None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev")
@@ -107,16 +111,35 @@ def upload():
 def photo(photo_id):
     if "user_id" not in session:
         return redirect("/login")
+    key = f"photo:{session['username']}:{photo_id}"
+
+    if cache is not None:
+        cached = cache.hgetall(key)
+        if cached:
+            filename = cached[b"filename"].decode()
+            pic = cached[b"pic"]
+            mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            response = Response(pic, mimetype=mimetype)
+            response.headers["X-Cache"] = "HIT"
+            return response
+
     with get_db(session["username"]) as co:
         row = co.execute("""
             SELECT filename, pic FROM photos
-            WHERE id = %s AND user_id = %s;        
+            WHERE id = %s AND user_id = %s;
         """, (photo_id, session["user_id"])).fetchone()
     if row is None:
         return "Not found", 404
     filename, pic = row
+
+    if cache is not None:
+        cache.hset(key, mapping={"filename": filename, "pic": pic})
+        cache.expire(key, 600)
+
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    return Response(pic, mimetype=mimetype)
+    response = Response(pic, mimetype=mimetype)
+    response.headers["X-Cache"] = "MISS"
+    return response
 
 @app.route("/delete/<int:photo_id>", methods=["POST"])
 def delete(photo_id):
@@ -127,6 +150,8 @@ def delete(photo_id):
             DELETE FROM photos
             WHERE id = %s AND user_id = %s;
         """, (photo_id, session["user_id"]))
+    if cache is not None:
+        cache.delete(f"photo:{session['username']}:{photo_id}")
     return redirect("/photos")
 
 @app.route("/logout")
