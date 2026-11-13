@@ -33,16 +33,30 @@ jobs:
         run: docker build --build-arg APP_VERSION=${{ github.sha }} -t ghcr.io/melmaado/photo-service:${{ github.sha }} .
       - name: Push the image
         run: docker push ghcr.io/melmaado/photo-service:${{ github.sha }}
-  deploy:
+  deploy-test:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Tag update
-        run: cd manifests/overlays/test && kustomize edit set image photo-service=ghcr.io/melmaado/photo-service:${{ github.sha }}
-      - name: Application of modifications
-        run: kubectl apply -k manifests/overlays/test
-      - name: Status check
-        run: kubectl rollout status deployment/photo-service -n 21359-test --timeout=120s
+      - name: Set image tag
+        run: cd manifests/overlays/online-test && kustomize edit set image photo-service=ghcr.io/melmaado/photo-service:${{ github.sha }}
+      - name: Deploy to online test
+        run: kubectl apply -k manifests/overlays/online-test --context team1@cluster-sc
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/photo-service-test -n team1 --context team1@cluster-sc --timeout=300s
+
+  deploy-prod:
+    needs: deploy-test
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set image tag
+        run: cd manifests/overlays/online-prod && kustomize edit set image photo-service=ghcr.io/melmaado/photo-service:${{ github.sha }}
+      - name: Deploy to online prod
+        run: kubectl apply -k manifests/overlays/online-prod --context team1@cluster-sc
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/photo-service-prod -n team1 --context team1@cluster-sc --timeout=300s
