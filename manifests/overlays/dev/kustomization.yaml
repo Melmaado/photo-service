@@ -12,7 +12,13 @@ patches:
       - op: add
         path: /spec/rules/0/host
         value: dev.photo.localhost
-
+  - target:
+      kind: Deployment
+      name: photo-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
 secretGenerator:
   - name: photo-secrets
     literals:
@@ -21,4 +27,5 @@ secretGenerator:
 
 images:
   - name: photo-service
-    newTag: "1.4"
+    newName: ghcr.io/melmaado/photo-service
+    newTag: ac5801ad96f8168361e53e21b9cc061c44edb6d9
