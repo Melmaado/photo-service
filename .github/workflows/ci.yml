@@ -33,8 +33,21 @@ jobs:
         run: docker build --build-arg APP_VERSION=${{ github.sha }} -t ghcr.io/melmaado/photo-service:${{ github.sha }} .
       - name: Push the image
         run: docker push ghcr.io/melmaado/photo-service:${{ github.sha }}
-  deploy-test:
+  deploy-dev:
     needs: build
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set image tag
+        run: cd manifests/overlays/dev && kustomize edit set image photo-service=ghcr.io/melmaado/photo-service:${{ github.sha }}
+      - name: Deploy to local dev
+        run: kubectl apply -k manifests/overlays/dev --context docker-desktop
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/photo-service -n 21359-dev --context docker-desktop --timeout=300s
+  deploy-test:
+    needs: deploy-dev
     if: github.ref == 'refs/heads/main'
     runs-on: self-hosted
     steps:
