@@ -53,11 +53,30 @@
         </div>
 
         {% for photo in photos %}
-        <a href="#_" class="lightbox" id="photo-{{ photo.id }}">
+        <div class="lightbox" id="photo-{{ photo.id }}">
+            <a href="#_" class="lightbox-backdrop" title="Close" onclick="resetRotation(this)"></a>
             <img src="{{ url_for('photo', photo_id=photo.id) }}" alt="{{ photo.filename }}">
             <span>{{ photo.filename }}</span>
-        </a>
+            <div class="rotate">
+                <button type="button" onclick="rotate(this, -90)" title="Rotate left">⟲</button>
+                <button type="button" onclick="rotate(this, 90)" title="Rotate right">⟳</button>
+            </div>
+        </div>
         {% endfor %}
     </main>
+    <script>
+        function rotate(button, degrees) {
+            const img = button.closest(".lightbox").querySelector("img");
+            const angle = Number(img.dataset.angle || 0) + degrees;
+            img.dataset.angle = angle;
+            img.style.transform = `rotate(${angle}deg)`;
+        }
+        
+        function resetRotation(link) {
+            const img = link.closest(".lightbox").querySelector("img");
+            img.dataset.angle = 0;
+            img.style.transform = "";
+        }
+        </script>
 </body>
 </html>
