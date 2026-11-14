@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 # Redeploys the whole online environment (test, prod, monitoring) on the OVH cluster.
 # Usage, from the repository root: ./scripts/deploy-online.sh <image-tag>
-# Example: ./scripts/deploy-online.sh "$(git rev-parse HEAD)"
+# Example: ./scripts/deploy-online.sh "$(git rev-parse origin/main)"
 set -euo pipefail
 
 CONTEXT="team1@cluster-sc"
 TAG="${1:?Usage: $0 <image-tag>}"
 IMAGE="ghcr.io/melmaado/photo-service:$TAG"
 
-echo "==> Checking context and secret"
+echo "==> Checking context"
 kubectl config get-contexts "$CONTEXT" > /dev/null
-kubectl --context "$CONTEXT" -n team1 get secret photo-secrets > /dev/null
+
+if ! kubectl --context "$CONTEXT" -n team1 get secret photo-secrets > /dev/null 2>&1; then
+  echo "==> Creating photo-secrets"
+  kubectl --context "$CONTEXT" -n team1 create secret generic photo-secrets \
+    --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 24)" \
+    --from-literal=SECRET_KEY="$(openssl rand -hex 32)"
+fi
+
+if ! kubectl --context "$CONTEXT" -n team1 get secret grafana-admin > /dev/null 2>&1; then
+  echo "==> Creating grafana-admin"
+  kubectl --context "$CONTEXT" -n team1 create secret generic grafana-admin \
+    --from-literal=admin-password="$(openssl rand -hex 16)"
+fi
 
 # Restore the overlays when the script ends, even after an error.
 trap 'git checkout -- manifests/overlays/online-test manifests/overlays/online-prod' EXIT

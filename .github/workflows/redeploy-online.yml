@@ -1,0 +1,14 @@
+name: Redeploy online
+
+on: workflow_dispatch
+
+jobs:
+  redeploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Redeploy test, prod and monitoring
+        run: ./scripts/deploy-online.sh "${{ github.sha }}"
