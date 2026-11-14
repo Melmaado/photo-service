@@ -1,4 +1,5 @@
 site_name: Photo Service Application Documentation
+site_url: https://melmaado.github.io/photo-service/
 theme:
   name: material
   palette:
