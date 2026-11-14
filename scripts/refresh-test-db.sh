@@ -24,6 +24,6 @@ SET username = (
 UPDATE photos
 SET filename = 'photo_' || id || coalesce(substring(filename from '\.[A-Za-z0-9]+$'), '');
 SQL
-psql "$test_url" -c "SELECT username FROM users;"
+  psql "$test_url" -c "SELECT u.username, count(p.id) AS photos FROM users u LEFT JOIN photos p ON p.user_id = u.id GROUP BY u.username ORDER BY photos DESC;"
 done
 echo "==> Test databases refreshed"
