@@ -1,0 +1,25 @@
+name: Refresh test database
+on: workflow_dispatch
+jobs:
+  refresh:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Update the script secret
+        run: |
+          kubectl create secret generic refresh-test-db-script \
+            --from-file=scripts/refresh-test-db.sh \
+            --dry-run=client -o yaml | kubectl apply -f - --context team1@cluster-sc -n team1
+      - name: Remove a previous run
+        run: kubectl delete pod refresh-test-db --ignore-not-found --context team1@cluster-sc -n team1
+      - name: Start the refresh
+        run: kubectl apply -f manifests/jobs/refresh-test-db.yaml --context team1@cluster-sc
+      - name: Wait for the refresh to finish
+        run: kubectl wait pod/refresh-test-db --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s --context team1@cluster-sc -n team1
+      - name: Show the logs
+        if: always()
+        run: kubectl logs refresh-test-db --context team1@cluster-sc -n team1
+      - name: Clean up
+        if: always()
+        run: kubectl delete pod refresh-test-db --ignore-not-found --context team1@cluster-sc -n team1
