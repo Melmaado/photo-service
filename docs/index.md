@@ -5,18 +5,43 @@ GitHub : [github.com/melmaado/photo-service](https://github.com/melmaado/photo-s
 ## Goal of the project
 
 The objective of the app is to provide a photo storage service that can detect duplicates.
-The deployment uses Kubernetes (k8s), using a pipeline dev->test->prod.
+The deployment uses Kubernetes (k8s), using a pipeline dev -> test -> prod.
 
-The stack used is: Python/Flask, Docker, Kubernetes (Docker Desktop locally, OVH online), Kustomize, GitHub Actions and GHCR, Gateway API (online) and ingress-nginx (local), Prometheus and Grafana.
+Users log in with a username, upload photos, see their duplicates side by side, mark favorites, open a photo in a lightbox, download or delete it.
 
-## Live services
+## Stack
 
-| What | URL |
+| Layer | Tools |
 |---|---|
-| App (prod) | http://team1.laboinfo-ecam.be |
-| Monitoring dashboard | http://team1.laboinfo-ecam.be/grafana |
+| Application | Python / Flask, gunicorn |
+| Data | PostgreSQL (2 shards, each with a replica), Alembic migrations, Redis cache (with a replica) |
+| Packaging | Docker, GHCR |
+| Clusters | Kubernetes: Docker Desktop locally, OVH online |
+| Configuration | Kustomize (base + overlays) |
+| Entry point | ingress-nginx (local), Gateway API (online) |
+| CI/CD | GitHub Actions, self-hosted runner, protected `production` environment |
+| Monitoring | Prometheus, Grafana |
 
-The test environment runs on the same cluster but is not exposed publicly (see *Cluster Setup*).
+## Environments
+
+| Environment | Where | URL |
+|---|---|---|
+| dev | local cluster (Docker Desktop) | http://dev.photo.localhost |
+| test | online cluster (OVH) | http://team1.laboinfo-ecam.be/test |
+| prod | online cluster (OVH) | http://team1.laboinfo-ecam.be |
+| Monitoring dashboard | online cluster (OVH) | http://team1.laboinfo-ecam.be/grafana |
+
+A change goes `feature/*` -> pull request -> `dev` -> release pull request -> `main` -> test -> manual approval -> prod. See *CI/CD*.
+
+## Documentation
+
+| Page | Content |
+|---|---|
+| *Onboarding* | install the tools, run the app locally, the daily workflow |
+| *Cluster Setup* | build the local and online clusters, move to a cloud cluster |
+| *CI/CD* | the pipeline, its jobs, the technical choices, troubleshooting |
+| *Database* | data model, migrations, replication, sharding, cache, test data refresh |
+| *Monitoring* | metrics, Prometheus, Grafana, scaling |
 
 ## Project progress
 
