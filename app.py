@@ -16,7 +16,8 @@ DATABASE_URLS = [
 ]
 
 REDIS_URL = os.environ.get("REDIS_URL")
-cache = redis.Redis.from_url(REDIS_URL) if REDIS_URL else None
+cache = redis.Redis.from_url(REDIS_URL, socket_timeout=0.5, socket_connect_timeout=0.5) if REDIS_URL else None
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev")
@@ -135,7 +136,10 @@ def photo(photo_id):
     key = f"photo:{session['username']}:{photo_id}"
 
     if cache is not None:
-        cached = cache.hgetall(key)
+        try:
+            cached = cache.hgetall(key)
+        except redis.RedisError:
+            cached = None
         if cached:
             filename = cached[b"filename"].decode()
             pic = cached[b"pic"]
@@ -154,8 +158,11 @@ def photo(photo_id):
     filename, pic = row
 
     if cache is not None:
-        cache.hset(key, mapping={"filename": filename, "pic": pic})
-        cache.expire(key, 600)
+        try:
+            cache.hset(key, mapping={"filename": filename, "pic": pic})
+            cache.expire(key, 600)
+        except redis.RedisError:
+            pass
 
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     response = Response(pic, mimetype=mimetype)
@@ -172,7 +179,10 @@ def delete(photo_id):
             WHERE id = %s AND user_id = %s;
         """, (photo_id, session["user_id"]))
     if cache is not None:
-        cache.delete(f"photo:{session['username']}:{photo_id}")
+        try:
+            cache.delete(f"photo:{session['username']}:{photo_id}")
+        except redis.RedisError:
+            pass
     return redirect(url_for("photos"))
 
 @app.route("/logout")
