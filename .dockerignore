@@ -17,3 +17,4 @@ test_app.py
 .github/
 manifests/
 scripts/
+site/

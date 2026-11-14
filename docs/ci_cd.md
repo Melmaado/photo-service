@@ -1,209 +1,317 @@
-# CI/CD
-## 1. What happens when I push some new code ?
-As soon as a push is made, GitHub Actions verifies the code of two routes, `/` and `/health` using pytest.
-After the test is done successfully, the image is built, published to GHCR and then deployed to the `21359-test` namespace **only if** the push is done on the `main` branch. From any other branch, deploy is ignored.
+# Cluster Setup
 
-If one of the tests fails, the rest of the pipeline is skipped altogether.
+This page explains how the Kubernetes clusters are built, from scratch, and how to move the project to a cloud cluster. It is done **once per cluster**. To work on the app day to day, see the *Onboarding* page.
 
-```
-push -> test -> build -> deploy
-```
+The project runs on two clusters:
 
-## 2. How does it work, step by step ?
-
-### Job 1: `test`
-This job runs on a `ubuntu-24.04` machine provided by GitHub :
-
-1. Downloads the repository code onto the machine;
-
-2. Sets up the right Python version, `3.12.6`, because it's the same as the one in the Dockerfile and the local venv;
-
-3. Installs dependencies thanks to `requirements-dev.txt` which adds `pytest` to the app dependencies;
-
-4. Runs `pytest` to check if the code works as intended.
-
-This job fails if one of the tests fails.
-
-### Job 2: `build`
-This job needs the `test` job to succeed in order to run. It also runs on its own `ubuntu-24.04` machine provided by GitHub. To build a new image, a new checkout of the code is needed (`contents: read`). To publish an image on GHCR, the `packages: write` permission is necessary.
-
-1. Downloads the repository code onto the machine;
-
-2. Logs in GHCR through the action `docker/login-action` using the temporary token `GITHUB_TOKEN` provided automatically each run (no password needed);
-
-3. Builds the new image of the app, named `ghcr.io/melmaado/photo-service`. Its tag is the hash of the commit. This hash is used as the value for `APP_VERSION` in the app as well;
-
-4. Pushes the image to GHCR, the image is public because the package `photo-service` is, thanks to the repository being public.
-
-An error in the Dockerfile, a connection issue, or a rights issue (failing push) can make this job fail.
-
-### Job 3: `deploy`
-This job is hosted on a self-hosted runner, on a local machine (`melmaado-mac`), because the professor's cluster is not available, and a local k8s one is running on that same machine. If the job was not running locally, the GitHub machines used for `test` and `build` would not be able to communicate with the local cluster hosted by Docker Desktop. It's the runner that looks for the jobs on GitHub, not the opposite. The line `runs-on: self-hosted` of the `ci.yml` file sends this job to the runner. When the professor's cluster is available, the pipeline will not change, only the target of deployment.
-
-It runs only after the `build` job, and only for a push to the `main` branch for two reasons: to keep the machine hosting the runner safe by only allowing code from `main` to be executed, and to avoid deploying code from a not validated test branch.
-
-1. Downloads the repository code onto the machine;
-
-2. Updates the tag of the image (making it the commit hash) in the test overlay (`kustomize edit set image ...`) in the runner's working copy without committing in the repository;
-
-3. Sends the configuration of the test overlay to the cluster in the `21359-test` namespace (`kubectl apply -k ...`) and since the tag of the image changed, k8s starts a rolling update;
-
-4. Waits until the rolling update is complete, if not so it makes the job fail. If it didn't wait, the job would be considered done as soon as the request was sent, even if the pods crash afterwards (`kubectl rollout status ...`). The maximum waiting time is 120 seconds.
-
-Any issue with the `melmaado-mac` local machine (stopped runner, Docker Desktop being closed, `kustomize` being absent) or with deployment (image not found, pods never ready) would make the job fail.
-
-## 3. Why is it done like that ?
-
-### Why do the tests come **before** the build ?
-Because of the fail fast principle:
-
-- Tests take a few seconds, the build takes way more time;
-
-- If they fail, the job stops directly without building nor publishing an image that will never be deployed;
-
-- No image with broken code will reach GHCR nor the cluster.
-
-### Why is the image tag the commit hash and not `latest`?
-Since each commit has a unique hash, it can have a unique tag for each commit. So that in case of an issue, it can be traced back to a specific commit. With latest:
-
-- The text `image: …:latest` stays the same from one deployment to another, k8s thus never sees any change in the template and doesn't start any rolling update: the new image would never be deployed;
-
-- It's also impossible to properly roll back since the previous version doesn't have a specific name.
-
-Since the hash is used as tag and as `APP_VERSION`, the application shows exactly which commit is running.
-
-### Why is the version baked **in** the image during the build?
-1. Before: the version came from the manifest. In the base, Deployment had `APP_VERSION: "1.3"` hardcoded, making the displayed version "1.3" while running another version. Keeping it so would have kept displaying "1.3" at each push.
-
-2. The issue: When the version is in the manifest, it depends on who deploys the image and how. Deploying the same image somewhere else would make it so it doesn't have a specific version, or have a fake one. The image wouldn't know where it comes from.
-
-3. The solution: Putting the version in the image, during the build. The image keeps its version everywhere it runs. Which is needed for what is coming: in production, we won't build a new image but promote the exact one tested. So it will keep telling the truth, whether during test or production.
-
-#### How it's done:
-
-- In the **Dockerfile**, `ARG APP_VERSION=dev` gets a value during the build and `ENV APP_VERSION=$APP_VERSION` keeps it in the container;
-
-- In the **CI**, `--build-arg APP_VERSION=< commit hash >` provides the hash;
-
-- These two lines are put at **the bottom of** the Dockerfile: since the hash changes each build, it avoids re-running `pip install` on every build, thanks to the layer cache;
-
-- Without `--build-arg`, the image displays `dev`, which directly highlights any oversight;
-
-- The `env` block was removed from the base Deployment manifest, else it would have replaced the image version.
-
-### Why a **self-hosted runner**? What are the safety precautions?
-Because the machines provided by GitHub can't reach the local cluster. The runner fetches the jobs so the local cluster never needs to be exposed to the internet.
-
-The main risk of a self-hosted runner on a public repository is that someone executes undesired code on the local machine. To prevent that:
-
-- The workflow only starts from a push that only the repository owner and collaborators with write access can do;
-
-- The `deploy` job runs only for the `main` branch;
-
-- The workflows coming from pull requests of forks need approval from the repository owner;
-
-- The runner is launched by hand thanks to the `./run.sh` script, it's not a permanent service;
-
-- The runner is in its own folder outside of the project, `~/actions-runner`.
-
-### Why use **Kustomize**? Why use a base and overlays?
-#### The issue
-Before using Kustomize, the namespace, the image, and `imagePullPolicy: Never` were hardcoded in the manifests. That would work for only **1** environment, which was `dev` at the time. For the other environments, there were only two bad options:
-
-- **Copy all the manifests** for each environment. At each modification (for example the probes), one had to do it everywhere, and an oversight would create invisible differences between `dev` and `test`;
-
-- **Modify the files on the fly** in the CI, with text replacement commands. Which is fragile and hard to read.
-
-#### The idea of Kustomize: what is common is done once
-
-```
-manifests/
-├── namespaces.yaml            # applied once, outside Kustomize
-├── base/                      # what is common to every environment
-│   ├── kustomization.yaml     # lists the 3 files below
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── ingress.yaml
-└── overlays/                  # only the differences per environment
-    ├── dev/
-    │   └── kustomization.yaml # namespace 21359-dev, image 1.4, host dev.photo.localhost
-    └── test/
-        └── kustomization.yaml # namespace 21359-test, GHCR image, host test.photo.localhost
-```
-
-- The base manifests describe the common structure of what every environment needs: 3 replicas, port 8080, the probes, the Service, the Ingress, the Deployment. It's only written **once**.
-
-- An overlay takes the base but changes specific things. It only contains differences.
-
-| | `dev` | `test` |
+| Cluster | Environments | Managed by |
 |---|---|---|
-| namespace | `21359-dev` | `21359-test` |
-| image | `photo-service:1.4` (local) | `ghcr.io/melmaado/photo-service:<hash>` |
-| `imagePullPolicy` | `Never` (from base) | `IfNotPresent` (patched) |
-| Ingress domain | `dev.photo.localhost` (patched) | `test.photo.localhost` (patched) |
+| Local (Docker Desktop) | dev | the developer |
+| Online (OVH, shared) | test, prod, monitoring | the teacher (the team only has the namespace `team1`) |
 
-#### Two main advantages:
+## Local cluster
 
-- **Applying an overlay needs nothing extra**: Kustomize is integrated into `kubectl`, the command `kubectl apply -f` is no longer used, now it's `kubectl apply -k manifests/overlays/test` that is used (except for `namespaces.yaml`);
+### Architecture
 
-- **CI changes the image tag using a single command**: `kustomize edit set image ...`, without modifying the other files, but it needs the installation of `kustomize` on the runner's machine.
+```
+                 Browser / curl
+                       | port 80
++- Cluster (Docker Desktop) ---------------------+
+|                      v                         |
+|  namespace ingress-nginx                       |
+|    Ingress Controller (nginx, localhost)       |
+|                      | dev.photo.localhost     |
+|                      v                         |
+|  namespace 21359-dev                           |
+|    Ingress -> Service -> app (3 pods)          |
+|                            |                   |
+|          +-----------------+-------------+     |
+|          v                 v             v     |
+|      postgres       postgres-shard1    redis   |
+|      (shard 0)      (shard 1)          (cache) |
+|      2 pods         2 pods             2 pods  |
++------------------------------------------------+
+```
 
+- **One single Ingress controller** for the whole cluster: it is the only entry point from outside;
+- The Services are **ClusterIP** or headless: they are only reachable from inside the cluster;
+- dev is a complete copy of the online environments: 3 app pods, 2 PostgreSQL shards with one replica each, and Redis with one replica (9 pods).
 
-### Why `ubuntu-24.04` instead of `ubuntu-latest`?
-During the first run of the CI, GitHub made it clear that the `ubuntu-latest` label will point `Ubuntu 26` starting October 19, 2026, the day before the `milestone 2` demo. The main risk is that the environment could change, which could provoke an unexpected issue (for example `Python 3.12.6` not being supported). It’s a good practice to use fixed versions to have a reproducible result, like `python:3.12.6-slim` in the Dockerfile and the pinned versions in `requirements.txt`. This way, the runner version only changes when we decide to.
+### 1. Enable Kubernetes
 
-## 4. What does it need to work ?
-### On the runner's machine (`melmaado-mac`)
+1. Install Docker Desktop (see *Onboarding*);
+2. In Docker Desktop, open *Settings → Kubernetes*, enable Kubernetes and apply;
+3. Wait until *Kubernetes running* is displayed at the bottom of the window.
 
-- **Docker Desktop** running, with **Kubernetes** enabled;
+Check that `kubectl` points to this cluster:
 
-- `kubectl` pointing to the local cluster: `kubectl config current-context` must return `docker-desktop`;
-
-- The **ingress-nginx** controller installed in the cluster (with Helm, see the Cluster Setup page);
-
-- The namespaces created: `kubectl apply -f manifests/namespaces.yaml`;
-
-- The standalone **`kustomize`** tool installed: `brew install kustomize`;
-
-- The **runner started** by hand: `cd ~/actions-runner && ./run.sh`. It must display `Listening for Jobs`. 
-
-### On GitHub
-
-- The runner `melmaado-mac` registered and **Idle** in *Settings → Actions → Runners*;
-
-- The package `ghcr.io/melmaado/photo-service` **public**, so the cluster can pull it without credentials;
-
-- Workflows from fork pull requests **requiring approval** in *Settings → Actions → General*.
-
-### When pushing
-
-- The push must be on the **`main`** branch, otherwise `deploy` is skipped;
-
-- The tests must pass, otherwise `build` and `deploy` are skipped.
-
-## 5. What to do when it crashes ?
-### Check that a deployment worked
 ```bash
-# 1. The run is green in the Actions tab of the repository
-# 2. The new pods are running in the test namespace
-kubectl get pods -n 21359-test
-# 3. The app answers, and the displayed version is the commit hash of the run
-curl http://test.photo.localhost
+kubectl config current-context    # must return docker-desktop
+kubectl get nodes                 # one node, STATUS Ready
 ```
 
-### Common issues
+Always check the context before an `apply` or a `delete`: once several clusters are configured, a command sent to the wrong one can break it.
 
-| Symptom | Likely cause | Fix |
+### 2. Install the Ingress controller
+
+The controller is installed with Helm, the Kubernetes package manager: it is made of dozens of resources (Deployment, Services, access rights) that are not written by hand.
+
+```bash
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+```
+
+- `upgrade --install` installs it if missing and updates it otherwise, so the command can be run again safely;
+- it lives in its **own namespace**, `ingress-nginx`, because it is shared by all environments.
+
+Check:
+
+```bash
+kubectl get pods -n ingress-nginx       # the controller pod is Running
+kubectl get service -n ingress-nginx    # ingress-nginx-controller: LoadBalancer, EXTERNAL-IP localhost
+curl -i http://localhost                # 404 from nginx: the controller answers, no rule matches yet
+```
+
+On Docker Desktop, the `LoadBalancer` Service is published directly on `localhost`, on ports 80 (HTTP) and 443 (HTTPS).
+
+nginx refuses requests bigger than 1 MB by default, which blocks most photo uploads. The Ingress of the project raises this limit with the annotation `nginx.ingress.kubernetes.io/proxy-body-size: "20m"`.
+
+> **Note:** the community project ingress-nginx was retired by Kubernetes in March 2026: it still works, but no longer receives updates or security fixes. It is used here for its simplicity and its documentation. For production, a maintained alternative should be preferred (NGINX Ingress Controller by F5, Traefik, or the Gateway API, like the online cluster). Only the `ingressClassName` field of the Ingress resources would change.
+
+### 3. Create the namespace
+
+```bash
+kubectl apply -f manifests/namespaces.yaml
+kubectl get namespaces
+```
+
+The namespace `21359-dev` is prefixed with the student ID, so it never collides with other students' namespaces on a shared cluster. It is kept outside Kustomize: a namespace does not belong to a namespace.
+
+### 4. Deploy dev
+
+dev is deployed by the CI (job `deploy-dev`) on every push to `dev` or `main`. See the *CI/CD* page. It can also be deployed by hand:
+
+```bash
+kubectl apply -k manifests/overlays/dev --context docker-desktop
+```
+
+The `dev` overlay adds the Ingress from `manifests/local-ingress/`, which is not part of the base because the online cluster uses the Gateway API instead. It also generates the Secret `photo-secrets` with fixed local values: they only protect a local database, so they can be in Git.
+
+The image comes from GHCR, like online. The image tag committed in the overlay may be old: the CI sets the right one at each deployment.
+
+Check:
+
+```bash
+kubectl get pods -n 21359-dev                # 9 pods Running
+kubectl get ingress -n 21359-dev             # dev.photo.localhost
+curl http://dev.photo.localhost/health
+```
+
+### 5. Set up the CI runner
+
+The deployment jobs of the CI run on a **self-hosted runner** installed on the developer's Mac: GitHub's machines cannot reach the local cluster, and the credentials of the online cluster must not leave the Mac. This is done once, on that machine only.
+
+1. On GitHub: *Settings → Actions → Runners → New self-hosted runner*, then choose **macOS** and the right architecture (**ARM64** for an Apple chip);
+2. Create a folder **outside the project**, then run the *Download* commands shown by GitHub inside it:
+```bash
+   mkdir ~/actions-runner && cd ~/actions-runner
+```
+3. Run the *Configure* command shown by GitHub (`./config.sh --url … --token …`). The token is secret: never share it or put it in a screenshot. Keep the default answers, and give the runner an explicit name (`melmaado-mac`);
+4. Install it as a macOS service, so it starts with the session and keeps running in the background:
+```bash
+   ./svc.sh install
+   ./svc.sh start
+   ./svc.sh status    # Started
+```
+   It must appear as **Idle** in *Settings → Actions → Runners*;
+5. The service does not read the shell configuration. If `kubectl` or `kustomize` are not found, add their folder (`/opt/homebrew/bin`) to `~/actions-runner/.path`, then `./svc.sh stop && ./svc.sh start`;
+6. In *Settings → Actions → General*, require **approval** for workflows coming from fork pull requests.
+
+The runner uses the `kubectl` contexts and the tools of the machine: both contexts (`docker-desktop` and `team1@cluster-sc`) must exist, and `kustomize` must be installed (`brew install kustomize`).
+
+### 6. Stop, restart and reset
+
+| Action | Effect |
+|---|---|
+| Quit Docker Desktop, or *Stop* Kubernetes | The cluster stops. Everything is kept: at restart, the pods come back automatically. Meanwhile, `deploy-dev` fails |
+| *Start* Kubernetes again | Nothing to reapply. Check with `kubectl get pods -A` |
+| *Reset cluster* (*Settings → Kubernetes*) | **Deletes everything**: controller, namespace, deployments, data. Redo sections 2 and 3, then re-run the last CI pipeline (or section 4) |
+
+## Online cluster (OVH)
+
+The project also runs on a shared Kubernetes cluster hosted at OVH and managed by the teacher. Each team gets **one namespace** (`team1`) and limited rights inside it.
+
+### Access
+
+The teacher provides a kubeconfig file. It contains a **private key**: it is never committed, shared or shown in a screenshot.
+
+1. Store it as `~/.kube/ecam.yaml`;
+2. Back up the current configuration, then merge both files into one:
+```bash
+cp ~/.kube/config ~/.kube/config.backup
+KUBECONFIG=~/.kube/config:~/.kube/ecam.yaml kubectl config view --flatten > /tmp/merged-config
+mv /tmp/merged-config ~/.kube/config
+```
+3. Check that both clusters are available:
+```bash
+kubectl config get-contexts     # docker-desktop and team1@cluster-sc
+```
+
+The current context stays `docker-desktop`. Every command for the online cluster passes the context explicitly: `kubectl --context team1@cluster-sc …`.
+
+### Architecture
+
+```
+                       Internet
+                          | team1.laboinfo-ecam.be
++- namespace infra (teacher) -------------------------+
+|        Gateway main-gateway (Envoy Gateway)         |
++--------+-----------------+-----------------+--------+
+         | /               | /test           | /grafana
++- namespace team1 -----------------------------------+
+|        v                 v                 v        |
+|     prod              test              Grafana     |
+|     app (3)           app (3)              |        |
+|     postgres (2)      postgres (2)      Prometheus  |
+|     shard1 (2)        shard1 (2)        (internal)  |
+|     redis (2)         redis (2)                     |
++-----------------------------------------------------+
+```
+
+Each environment has its own HTTPRoute: `team1-routes-prod`, `team1-routes-test` and `grafana-route`.
+
+- The **Gateway** belongs to the teacher: teams cannot see or change it. Each team attaches its own **HTTPRoutes** to it (Gateway API, the successor of Ingress);
+- prod is served on `/`, test on `/test` and Grafana on `/grafana`. The longest matching prefix wins, so `/test/...` never reaches prod;
+- In total: 9 pods for test, 9 for prod, plus Prometheus and Grafana.
+
+### Several environments in one namespace
+
+Without the right to create namespaces, the environments are told apart **by name and by label**, in the overlays `online-test` and `online-prod`:
+
+```yaml
+namespace: team1
+nameSuffix: -test
+labels:
+  - pairs:
+      env: test
+    includeSelectors: true
+```
+
+- `nameSuffix` gives each resource a unique name (`photo-service-test`, `postgres-test`, `redis-test`…);
+- `includeSelectors: true` adds `env: test` to the **selectors** too. Without it, all pods would share `app: photo-service`, and the Service of test would also send traffic to the pods of prod.
+
+Kustomize renames the objects, but not the names written inside text fields. These are fixed by hand:
+
+- `patch-env.yaml` sets the internal addresses of the databases and Redis (`postgres-test-0.postgres-test`, `redis-test-0.redis-test`…) and `URL_PREFIX=/test`;
+- each `httproute.yaml` points to its Service with its suffix (`photo-service-test`).
+
+### Serving test under `/test`
+
+The app normally answers on `/`. To serve it under `/test`, the overlay sets `URL_PREFIX=/test`, and a small WSGI middleware in `app.py` removes the prefix from incoming requests and adds it back to every link generated with `url_for`. The session cookie name and path also use the prefix, so logging in to test does not log out of prod.
+
+### Rights of the team
+
+The rights in `team1` are limited. What matters for the project:
+
+| Action | Allowed | Consequence |
 |---|---|---|
-| `deploy` stays in **Queued** / waiting for a runner | The runner is stopped | Start it: `cd ~/actions-runner && ./run.sh` |
-| `deploy` is **skipped** | The push was not on `main`, or `test`/`build` failed | Push on `main`; check the failed job's logs |
-| `test` fails | A unit test fails | Open the `test` job logs: pytest shows the failing `assert`. Run `pytest` locally to reproduce |
-| `build` fails at the push step | Missing `packages: write` permission, or GHCR login failed | Check the `permissions` block of the `build` job |
-| `kustomize: command not found` | `kustomize` not installed, or the runner was started before installing it | `brew install kustomize`, then restart the runner (Ctrl+C, then `./run.sh`) |
-| `kubectl` cannot connect to the cluster | Docker Desktop or Kubernetes is stopped | Start Docker Desktop and wait for *Kubernetes running* |
-| Pods stuck in `ImagePullBackOff` / `ErrImagePull` | The image cannot be downloaded (wrong tag, private package) | Check that the package is public and that the tag exists on GHCR. Details: `kubectl describe pod <pod> -n 21359-test` |
-| `rollout status` times out after 120 s | The new pods never become ready (app crashes, `/health` not answering) | Read the pod logs: `kubectl logs <pod> -n 21359-test` |
-| `curl` returns a **404 from nginx** | No Ingress rule matches the domain | Use the right domain (`test.photo.localhost`) and check `kubectl get ingress -n 21359-test` |
+| Deployments, StatefulSets, Services, Secrets, HTTPRoutes | yes | everything the app needs |
+| Persistent volumes | only through `volumeClaimTemplates` | the StatefulSet controller creates them |
+| Delete a Secret | no (update/patch only) | Secrets are updated with `kubectl apply` |
+| ConfigMaps | no | configuration files are stored in Secrets |
+| `exec`, `port-forward`, events | no | debug with `kubectl logs` and `-o jsonpath='{.status.conditions}'` |
+| Argo CD `Application` | no | deployments are done by GitHub Actions |
+| Create a namespace | no | test and prod share `team1` |
 
-### Roll back quickly
-In an emergency, `kubectl rollout undo deployment/photo-service -n 21359-test` restores the previous version in a few seconds. It is an imperative command: the clean fix is then to revert the faulty commit on `main`, so that the repository and the cluster match again.
+The cluster is shared and **almost full**. New pods can stay `Pending` with `Insufficient memory`. The memory requests were lowered (PostgreSQL asks for 96 Mi) so that test and prod both fit; there is no room left for an online dev.
+
+### Secrets
+
+Two Secrets are not in Git, because they contain passwords:
+
+- `photo-secrets`: `POSTGRES_PASSWORD` and `SECRET_KEY` (Flask session signature);
+- `grafana-admin`: `admin-password` of Grafana.
+
+They are created with random values by `scripts/deploy-online.sh` when they are missing, and never displayed. To read the Grafana password, only in a private terminal:
+
+```bash
+kubectl --context team1@cluster-sc -n team1 get secret grafana-admin \
+  -o jsonpath='{.data.admin-password}' | base64 -d
+```
+
+Never recreate `photo-secrets` while the PostgreSQL volumes still exist: PostgreSQL keeps the password of its first start, and the app could no longer connect.
+
+### Deploy
+
+The app is deployed by the CI only (see *CI/CD*). The image tag in the online overlays is not updated in Git, so applying them by hand would bring back an old version.
+
+If the namespace is wiped, everything is rebuilt with the **Redeploy online** button (*Actions → Redeploy online → Run workflow*, then approve), or by hand with an explicit tag:
+
+```bash
+./scripts/deploy-online.sh "$(git rev-parse origin/main)"
+```
+
+The script:
+
+1. creates the missing Secrets;
+2. applies `online-test` and `online-prod` with the given image tag;
+3. applies `monitoring`;
+4. waits for every Deployment to be ready, and stops at the first error.
+
+It is idempotent: if everything already exists, Kubernetes answers `unchanged` and nothing restarts. The databases come back **empty** after a wipe: there are no backups. The init container recreates the tables.
+
+Before applying a change for the first time, a dry run checks the syntax **and the rights**, without creating anything:
+
+```bash
+kubectl --context team1@cluster-sc apply -k manifests/overlays/online-prod --dry-run=server
+```
+
+### Check
+
+```bash
+kubectl --context team1@cluster-sc -n team1 get pods -l env=prod
+kubectl --context team1@cluster-sc -n team1 describe httproute team1-routes-prod   # Accepted: True, ResolvedRefs: True
+curl http://team1.laboinfo-ecam.be/health
+curl http://team1.laboinfo-ecam.be/test/health
+```
+
+## Moving to a cloud cluster
+
+The same manifests can run on a managed cluster such as **Amazon EKS**, **Google GKE** or **Azure AKS**. The app does not depend on OVH; only the way the cluster is reached and a few shared pieces change.
+
+### What stays the same
+
+- The base manifests: app, StatefulSets, Services, probes, init container;
+- The images on GHCR (public, nothing to configure);
+- The Kustomize overlays and the CI flow (`test → build → deploy → approval → prod`).
+
+### What changes
+
+| Topic | Local / OVH | Cloud |
+|---|---|---|
+| Cluster | Docker Desktop / shared namespace | own cluster, created with `eksctl`, `gcloud` or `az` |
+| Environments | name suffixes in `team1` | **one namespace per environment** (`photo-test`, `photo-prod`): `nameSuffix` and `patch-env.yaml` are no longer needed |
+| Entry point | nginx Ingress / teacher's Gateway | own Gateway (or Ingress) with a cloud load balancer, and a DNS record |
+| HTTPS | none locally / teacher's Gateway | cert-manager with Let's Encrypt |
+| Volumes | Docker Desktop disk / OVH | the default StorageClass of the cloud (EBS, Persistent Disk, Azure Disk) |
+| Secrets | created by the script | a secret manager (AWS Secrets Manager, Google Secret Manager, Key Vault) with External Secrets Operator |
+| CI access | self-hosted runner with a kubeconfig | GitHub-hosted runner with **OIDC**: GitHub gets a short-lived token from the cloud, no key is stored |
+| Database | PostgreSQL StatefulSets | can stay, or move to a managed database (RDS, Cloud SQL, Azure Database) with backups and failover included |
+| Photos | in PostgreSQL | object storage (S3, Cloud Storage, Blob Storage), only the path in the database |
+
+### Steps
+
+1. **Create the cluster** with the cloud CLI (for example `eksctl create cluster --name photo --region eu-west-3 --nodes 3`), then check the new context with `kubectl config get-contexts`;
+2. **Install the entry point**: a Gateway API implementation (Envoy Gateway, or the cloud's own) or an Ingress controller. It gets a public IP from the cloud load balancer; point a DNS record to it;
+3. **Install cert-manager** and a Let's Encrypt issuer for HTTPS;
+4. **Create the namespaces** `photo-test` and `photo-prod`;
+5. **Adapt the overlays**: replace `namespace: team1` and `nameSuffix` by the new namespaces, remove `patch-env.yaml`, and point the HTTPRoutes to the new Gateway with the real host name;
+6. **Create the Secrets** in each namespace, by hand with `openssl rand` or through External Secrets;
+7. **Give the CI access**: create a cloud role that trusts GitHub's OIDC provider for this repository, and replace `runs-on: self-hosted` by `ubuntu-24.04` in the deploy jobs, with the cloud's login action (for example `aws-actions/configure-aws-credentials`) before `kubectl`;
+8. **Deploy** by pushing to `main`, then check with `kubectl get pods -n photo-prod` and the public URL;
+9. **Optionally**, install Argo CD: the CI would then only write the new tag to Git, and Argo CD would sync the cluster.
+
+### Cost and limits
+
+A managed cluster costs money even when idle (control plane and nodes). For a small project, a single small node pool is enough; a managed database and object storage add their own costs, but remove the need to run backups and failover by hand.

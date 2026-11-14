@@ -5,19 +5,19 @@ This page explains how the services are monitored and scaled on the online clust
 ## 1. Overview
 
 ```
-                      Browser
-                         │  http://team1.laboinfo-ecam.be/grafana
-┌─ namespace team1 ──────▼──────────────────────────────────────────┐
-│                                                                   │
-│   Grafana (dashboard, read-only)                                  │
-│      │  PromQL queries                                            │
-│      ▼                                                            │
-│   Prometheus (collects metrics every 15 s)                        │
-│      │  GET /metrics on each pod                                  │
-│      ▼                                                            │
-│   photo-service-prod (3 pods)      photo-service-test (3 pods)    │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
+                     Browser
+                        | team1.laboinfo-ecam.be/grafana
++- namespace team1 -----v-----------------------------+
+|                                                     |
+|   Grafana (dashboard, read-only)                    |
+|      | PromQL queries                               |
+|      v                                              |
+|   Prometheus (collects metrics every 15 s)          |
+|      | GET /metrics on each pod                     |
+|      v                                              |
+|   photo-service-prod (3)    photo-service-test (3)  |
+|                                                     |
++-----------------------------------------------------+
 ```
 
 - **The app** exposes its own metrics on `/metrics`: number of requests, response codes, response times;
@@ -25,9 +25,12 @@ This page explains how the services are monitored and scaled on the online clust
 - **Grafana** queries Prometheus and displays the results on a public, read-only dashboard;
 - **Scaling** is done from a separate tool (Headlamp or `kubectl`), and its effect is visible on the dashboard.
 
+Only test and prod are monitored. dev runs on the local cluster, which this Prometheus cannot reach. PostgreSQL and Redis are not monitored either (see *Known limitations*).
+
 | What | Where |
 |---|---|
 | App (prod) | http://team1.laboinfo-ecam.be |
+| App (test) | http://team1.laboinfo-ecam.be/test |
 | Dashboard | http://team1.laboinfo-ecam.be/grafana |
 | Prometheus | internal only (`http://prometheus:9090` inside the cluster) |
 
@@ -140,13 +143,14 @@ The app and Grafana use the same domain, `team1.laboinfo-ecam.be`, with two HTTP
 | HTTPRoute | Path | Backend |
 |---|---|---|
 | `team1-routes-prod` | `/` | `photo-service-prod:8080` |
+| `team1-routes-test` | `/test` | `photo-service-test:8080` |
 | `grafana-route` | `/grafana` | `grafana:3000` |
 
-When several rules match a URL, the Gateway API picks the **longest prefix**: `/grafana/...` goes to Grafana, everything else goes to the app. Grafana is told it lives under `/grafana` (`GF_SERVER_ROOT_URL` and `GF_SERVER_SERVE_FROM_SUB_PATH`), so no URL rewrite is needed.
+When several rules match a URL, the Gateway API picks the **longest prefix**: `/grafana/...` goes to Grafana, `/test/...` to test, everything else goes to prod. Grafana is told it lives under `/grafana` (`GF_SERVER_ROOT_URL` and `GF_SERVER_SERVE_FROM_SUB_PATH`), so no URL rewrite is needed.
 
 ### Configuration as code (provisioning)
 
-Grafana has no persistent disk (our account cannot create PersistentVolumeClaims): its internal database lives in an `emptyDir` and is **lost at every restart**. Everything it needs is therefore described in files stored in Git, and loaded at startup:
+Grafana has no persistent disk: it is a Deployment, and our account cannot create PersistentVolumeClaims directly (only StatefulSets get volumes, through their `volumeClaimTemplates`). Its internal database lives in an `emptyDir` and is **lost at every restart**. Everything it needs is therefore described in files stored in Git, and loaded at startup:
 
 | File | Secret | Mounted in | Role |
 |---|---|---|---|
@@ -168,9 +172,9 @@ The dashboard is public and read-only:
 | `GF_AUTH_DISABLE_LOGIN_FORM` | `true` | no login form |
 | `GF_AUTH_BASIC_ENABLED` | `false` | no login through the API either |
 
-The Gateway only serves **HTTP**: a password sent to Grafana would travel in clear. With these settings, no password is ever sent over the network.
+HTTPS is handled by the teacher's Gateway and was not available when the monitoring was set up: a password sent to Grafana could travel in clear. With these settings, no password is ever sent over the network.
 
-The admin password is stored in a Secret created **by hand** (`grafana-admin`), never in Git. The Deployment marks it `optional: true`, so Grafana starts even if this Secret does not exist (for example after the cluster is wiped).
+The admin password is stored in a Secret (`grafana-admin`), never in Git. It is created with a random value by `scripts/deploy-online.sh` when it is missing. The Deployment marks it `optional: true`, so Grafana starts even if this Secret does not exist; the admin password would then be the default one (`admin`), which is why the script creates it.
 
 ### Startup time
 
@@ -232,7 +236,7 @@ histogram_quantile(0.95, sum by (le, job) (rate(flask_http_request_duration_seco
 
 The p95 is used rather than the average: an average hides the slow requests, the p95 shows what the least lucky users experience.
 
-Today the app answers in well under a millisecond. All requests fall into the smallest bucket (0 to 5 ms), and Prometheus assumes they are spread evenly inside it, so the panel shows a flat **4.75 ms**. This is the precision limit of the buckets, not the real latency; the panel becomes meaningful once the app does real work (storing photos, detecting duplicates). Without traffic, the panel is empty.
+Simple pages answer in well under a millisecond: they all fall into the smallest bucket (0 to 5 ms), and Prometheus assumes they are spread evenly inside it, so the value can sit at **4.75 ms**. This is the precision limit of the buckets, not the real latency. Requests that read a photo from PostgreSQL take longer than the ones served from Redis, so the panel also shows the effect of the cache. Without traffic, the panel is empty.
 
 ## 6. Scaling
 
@@ -280,7 +284,7 @@ To generate traffic during a demo:
 
 Scaling from Headlamp or `kubectl` changes the **live object** in the cluster, not the files in Git. The two now differ (*configuration drift*): Git says 3, the cluster runs 5.
 
-At the next `apply` (`scripts/deploy-online.sh`, or the pipeline), Kubernetes goes back to the value in Git.
+At the next `apply` (the pipeline, the **Redeploy online** button, or `scripts/deploy-online.sh`), Kubernetes goes back to the value in Git.
 
 | Need | Method | Lasts |
 |---|---|---|
@@ -298,7 +302,7 @@ The online cluster is shared: our account (`team1`) only has rights inside its o
 | Not allowed | Consequence | Workaround |
 |---|---|---|
 | ConfigMaps (the Role says `configmap`, singular) | no ConfigMap for config files | config files delivered as **Secrets** |
-| PersistentVolumeClaims | no persistent disk | `emptyDir`; Grafana fully provisioned from Git |
+| PersistentVolumeClaims (created directly) | no persistent disk for a Deployment | `emptyDir`; Grafana fully provisioned from Git. StatefulSets (PostgreSQL) still get volumes, created by the StatefulSet controller |
 | Metrics API (`metrics.k8s.io`) | no CPU / memory metrics | application metrics (requests, errors, latency) |
 | ServiceAccounts, Roles | Prometheus cannot list pods through the API | discovery through a **headless Service** and DNS |
 | `pods/portforward` | no direct access to internal Services | throwaway `curl` pod + `kubectl logs` |
@@ -318,9 +322,11 @@ For subresources, `--subresource` is required: `auth can-i create pods/portforwa
 
 ### Known limitations
 
-- **Data loss on restart**: Prometheus keeps its data in an `emptyDir`. A restart or a move to another node starts the history from zero. Grafana loses nothing, since it is rebuilt from Git;
-- **HTTP only**: the Gateway does not serve HTTPS for our domain. This is why Grafana has no login at all, and why test and dev are not exposed;
-- **`/metrics` is public**: it is served by the prod pods, so it is reachable through the public route. It only contains request counters, but in a real company it would be blocked at the Gateway, since Prometheus reads it from inside the cluster;
+- **Data loss on restart**: Prometheus keeps its data in an `emptyDir`. A restart or a move to another node starts the history from zero. Running Prometheus as a StatefulSet with a `volumeClaimTemplate`, like PostgreSQL, would keep it. Grafana loses nothing, since it is rebuilt from Git;
+- **No login on Grafana**: HTTPS was not available when it was set up, so Grafana was made fully read-only instead of protected by a password;
+- **dev is not monitored**: it runs on the local cluster, out of reach of this Prometheus;
+- **PostgreSQL and Redis are not monitored**: only the app exposes metrics. The next step would be `postgres_exporter` and `redis_exporter` (connections, replication lag, cache hit rate), scraped the same way through headless Services;
+- **`/metrics` is public**: it is served by the app pods, so it is reachable through the public routes (`/metrics` and `/test/metrics`). It only contains request counters, but in a real company it would be blocked at the Gateway, since Prometheus reads it from inside the cluster;
 - **Latency precision**: limited by the histogram buckets (see section 5);
 - **Grafana dashboard format**: the dashboard uses the new v2 format (needed for the auto grid layout). At startup, Grafana 13.3.0 logs an internal error about `managedFields` for this dashboard (`[SHOULD NOT HAPPEN]`). The dashboard loads and works normally; the error comes from Grafana's own handling of the v2 format.
 
@@ -330,7 +336,7 @@ The dashboard is stored in Git (`manifests/monitoring/grafana-dashboard-photo-se
 
 ### 1. Open the login temporarily
 
-The admin password must exist in the cluster. If needed, create it (it never goes into Git):
+The admin password exists in the cluster (`scripts/deploy-online.sh` creates it). To read it, or to replace it by a new one (it never goes into Git):
 
 ```bash
 GRAFANA_PASSWORD="$(openssl rand -base64 24)"
