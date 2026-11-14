@@ -27,6 +27,9 @@
                 <form method="post" action="{{ url_for('delete', photo_id=photo.id) }}" class="delete">
                     <button title="Delete">✕</button>
                 </form>
+                <form method="post" action="{{ url_for('favorite', photo_id=photo.id) }}" class="favorite{% if photo.is_favorite %} on{% endif %}">
+                    <button title="Favorite">{% if photo.is_favorite %}♥{% else %}♡{% endif %}</button>
+                </form>
                 <a href="{{ url_for('photo', photo_id=photo.id) }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
                 <a href="#photo-{{ photo.id }}">
                     <img src="{{ url_for('photo', photo_id=photo.id) }}" alt="{{ photo.filename }}">
@@ -42,6 +45,9 @@
             <div class="card">
                 <form method="post" action="{{ url_for('delete', photo_id=photo.id) }}" class="delete">
                     <button title="Delete">✕</button>
+                </form>
+                <form method="post" action="{{ url_for('favorite', photo_id=photo.id) }}" class="favorite{% if photo.is_favorite %} on{% endif %}">
+                    <button title="Favorite">{% if photo.is_favorite %}♥{% else %}♡{% endif %}</button>
                 </form>
                 <a href="{{ url_for('photo', photo_id=photo.id) }}" download="{{ photo.filename }}" class="download" title="Download">↓</a>
                 <a href="#photo-{{ photo.id }}">

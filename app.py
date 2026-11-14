@@ -81,13 +81,13 @@ def photos():
         return redirect(url_for("login"))
     with get_db(session["username"]) as co:
         rows = co.execute("""
-            SELECT id, filename, size
+            SELECT id, filename, size, is_favorite
             FROM photos
             WHERE user_id = %s
-            ORDER BY created_at DESC;
+            ORDER BY is_favorite DESC, created_at DESC;
         """,(session["user_id"],)).fetchall()
         dup_rows = co.execute("""
-        SELECT id, filename, size
+        SELECT id, filename, size, is_favorite
         FROM photos
         WHERE user_id = %s
             AND pic_hash IN (
@@ -100,11 +100,11 @@ def photos():
         ORDER BY pic_hash, created_at;
         """,(session["user_id"], session["user_id"])).fetchall()
     result = []
-    for photo_id, filename, size in rows:
-        result.append({"id": photo_id, "filename":filename, "size":size})
+    for photo_id, filename, size, is_favorite in rows:
+        result.append({"id": photo_id, "filename":filename, "size":size, "is_favorite":is_favorite})
     duplicates = []
-    for photo_id, filename, size in dup_rows:
-        duplicates.append({"id": photo_id, "filename":filename, "size":size})
+    for photo_id, filename, size, is_favorite in dup_rows:
+        duplicates.append({"id": photo_id, "filename":filename, "size":size, "is_favorite":is_favorite})
     return render_template("photos.html", photos=result, duplicates=duplicates)
 
 @app.route("/upload", methods=["POST"])
@@ -173,6 +173,18 @@ def delete(photo_id):
         """, (photo_id, session["user_id"]))
     if cache is not None:
         cache.delete(f"photo:{session['username']}:{photo_id}")
+    return redirect(url_for("photos"))
+
+@app.route("/favorite/<int:photo_id>", methods=["POST"])
+def favorite(photo_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    with get_db(session["username"]) as co:
+        co.execute("""
+        UPDATE photos
+        SET is_favorite = NOT is_favorite
+        WHERE id = %s AND user_id = %s
+        """, (photo_id, session["user_id"]))
     return redirect(url_for("photos"))
 
 @app.route("/logout")

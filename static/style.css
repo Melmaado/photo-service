@@ -284,3 +284,40 @@ form.delete button:hover { transform: scale(1.15) rotate(90deg); }
 
 .card:hover a.download { opacity: 1; }
 .card a.download:hover { transform: scale(1.15); }
+
+form.favorite {
+  position: absolute;
+  top: 120px;
+  right: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  width: auto;
+}
+
+form.favorite button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--card);
+  color: var(--accent);
+  font-size: 1.1rem;
+  line-height: 1;
+  box-shadow: 0 3px 0 var(--border);
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.card:hover form.favorite button,
+form.favorite.on button { opacity: 1; }
+
+form.favorite.on button {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 3px 0 var(--accent-dark);
+}
+
+form.favorite button:hover { transform: scale(1.15); }
